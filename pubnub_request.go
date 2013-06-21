@@ -11,6 +11,7 @@ type PubnubRequest struct {
 	url string
 	Channel string
 	Message interface {}
+	Timetoken string
 }
 
 func NewPubnubRequest(operation string) (*PubnubRequest) {
@@ -42,6 +43,12 @@ func (req *PubnubRequest) Url(publishKey string, subscribeKey string, secretKey 
 			panic(err)
 		}
 		Url.Path += "/" + req.operation + "/" + publishKey + "/" + subscribeKey + "/" + secretKey + "/" + req.Channel + "/0/" + string(messageBytes)
+	case "subscribe":
+		timetoken := "0"
+		if req.Timetoken != "" {
+			timetoken = req.Timetoken
+		}
+		Url.Path += "/" + req.operation + "/" + subscribeKey + "/" + req.Channel + "/0/" + timetoken
 	}
 
 	req.url = Url.String()
