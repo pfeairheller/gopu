@@ -111,10 +111,12 @@ func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoke
 		json.Unmarshal([]byte(data), &sub_resp)
 
 		tt = sub_resp[1].(string)
-		jsonObj := sub_resp[0]
+		messages := sub_resp[0].([]interface{})
 
 		if subscription.Callback != nil {
-			subscription.Callback(jsonObj)
+			for _, msg := range messages {
+				subscription.Callback(msg)
+			}
 		}
 	}
 }
