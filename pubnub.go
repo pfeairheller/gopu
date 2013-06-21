@@ -1,13 +1,11 @@
 package gopu
 
 import (
-	"net/http"
-	"io/ioutil"
-	"io"
 	"crypto/rand"
-	// "fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"encoding/json"
-	// "time"
 )
 
 var (
@@ -15,13 +13,12 @@ var (
 )
 
 type Pubnub struct {
-	publishKey string
+	publishKey   string
 	subscribeKey string
-	secretKey string
+	secretKey    string
 }
 
-
-func NewPubnub(publishKey string, subscribeKey string, secretKey string) (*Pubnub) {
+func NewPubnub(publishKey string, subscribeKey string, secretKey string) *Pubnub {
 	pubnub := new(Pubnub)
 	pubnub.publishKey = publishKey
 	pubnub.subscribeKey = subscribeKey
@@ -35,14 +32,14 @@ func (pn *Pubnub) Publish(channel string, message interface{}, callback func(str
 	req.Channel = channel
 	req.Message = message
 
-	data := pn.makeRequest(req)
+	data, _ := pn.makeRequest(req)
 
 	callback(data)
 }
 
 func (pn *Pubnub) Time(callback func(string)) {
 	req := NewPubnubRequest("time")
-	data := pn.makeRequest(req)
+	data, _ := pn.makeRequest(req)
 
 	callback(data)
 }
@@ -59,63 +56,77 @@ func (pn *Pubnub) UUID() []byte {
 }
 
 type Subscription struct {
-	Callback func(interface {})
-	Connect func()
+	Callback   func(interface{})
+	Connect    func()
 	Disconnect func()
-	Reconnect func()
-	Error func()
-	Restore func()
-	Presence func(string, string, string)
+	Reconnect  func()
+	Error      func()
+	Presence   func(string, string, string)
 }
 
-
-
-func (pn *Pubnub) Subscribe(channel string, subscription *Subscription) {
+func (pn *Pubnub) Subscribe(channel string, subscription *Subscription, restore bool) {
 	req := NewPubnubRequest("subscribe")
 	req.Channel = channel
 
-	data := pn.makeRequest(req)
+	data, _ := pn.makeRequest(req)
 	var sub_resp []interface{}
 	json.Unmarshal([]byte(data), &sub_resp)
 
 	timetoken := sub_resp[1]
 
-	go pn.poll_loop(channel, subscription, timetoken.(string))
+	go pn.poll_loop(channel, subscription, timetoken.(string), restore)
 
 }
 
-func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoken string) {
+func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoken string, restore bool) {
 	tt := timetoken
+	connected := true
 	for {
 		req := NewPubnubRequest("subscribe")
 		req.Channel = channel
 		req.Timetoken = tt
 
 		var sub_resp []interface{}
-		data := pn.makeRequest(req)
+		data, err := pn.makeRequest(req)
+		if err != nil {
+			if subscription.Disconnect != nil {
+				subscription.Disconnect()
+			}
+			connected = false
+
+			if restore {
+				continue
+			} else {
+				return
+			}
+		}
+
+		if !connected {
+			if subscription.Reconnect != nil {
+				subscription.Reconnect()
+			}
+			connected = true
+		}
+
 		json.Unmarshal([]byte(data), &sub_resp)
-		
+
 		tt = sub_resp[1].(string)
 		jsonObj := sub_resp[0]
-		
+
 		if subscription.Callback != nil {
 			subscription.Callback(jsonObj)
 		}
 	}
 }
 
-
-func (pn *Pubnub) makeRequest(req *PubnubRequest) (string) {
+func (pn *Pubnub) makeRequest(req *PubnubRequest) (string, error) {
 	resp, err := http.Get(req.Url(pn.publishKey, pn.subscribeKey, pn.secretKey))
 	if err != nil {
-		panic(err)
+		return "", err
 	}
 
 	defer resp.Body.Close()
 	result, err := ioutil.ReadAll(resp.Body)
-	return string(result)
+	return string(result), nil
 
 }
-
-
-
