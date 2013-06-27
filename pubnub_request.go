@@ -12,6 +12,7 @@ type PubnubRequest struct {
 	Channel string
 	Message interface {}
 	Timetoken string
+	UUID string
 }
 
 func NewPubnubRequest(operation string) (*PubnubRequest) {
@@ -48,7 +49,7 @@ func (req *PubnubRequest) Url(publishKey string, subscribeKey string, secretKey 
 		if req.Timetoken != "" {
 			timetoken = req.Timetoken
 		}
-		Url.Path += "/" + req.operation + "/" + subscribeKey + "/" + req.Channel + "/0/" + timetoken
+		Url.Path += "/" + req.operation + "/" + subscribeKey + "/" + req.Channel + "/0/" + timetoken + "?uuid=" + req.UUID
 	}
 
 	req.url = Url.String()

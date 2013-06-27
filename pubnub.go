@@ -1,11 +1,11 @@
 package gopu
 
 import (
-	"crypto/rand"
-	"io"
 	"io/ioutil"
 	"net/http"
 	"encoding/json"
+	"github.com/nu7hatch/gouuid"
+	"fmt"
 )
 
 var (
@@ -44,15 +44,12 @@ func (pn *Pubnub) Time(callback func(string)) {
 	callback(data)
 }
 
-func (pn *Pubnub) UUID() []byte {
-	c := 10
-	b := make([]byte, c)
-	n, err := io.ReadFull(rand.Reader, b)
-	if n != len(b) || err != nil {
+func (pn *Pubnub) UUID() string {
+	u4, err := uuid.NewV4()
+	if err != nil {
 		panic(err)
 	}
-	// The slice should now contain random bytes instead of only zeroes.
-	return b
+	return u4.String()
 }
 
 type Subscription struct {
@@ -66,6 +63,7 @@ type Subscription struct {
 
 func (pn *Pubnub) Subscribe(channel string, subscription *Subscription, restore bool) {
 	req := NewPubnubRequest("subscribe")
+	req.UUID = pn.UUID()
 	req.Channel = channel
 
 	data, _ := pn.makeRequest(req)
@@ -74,17 +72,47 @@ func (pn *Pubnub) Subscribe(channel string, subscription *Subscription, restore 
 
 	timetoken := sub_resp[1]
 
-	go pn.poll_loop(channel, subscription, timetoken.(string), restore)
+	messages := sub_resp[0].([]interface{})
+	if subscription.Callback != nil {
+		for _, msg := range messages {
+			subscription.Callback(msg)
+		}
+	}
+
+	go pn.poll_loop(channel, subscription, timetoken.(string), req.UUID, restore)
 
 }
 
-func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoken string, restore bool) {
+func (pn *Pubnub) Presence(channel string, subscription *Subscription, restore bool) {
+	req := NewPubnubRequest("subscribe")
+	req.UUID = pn.UUID()
+	req.Channel = channel + "-pnpres"
+
+	data, _ := pn.makeRequest(req)
+	var sub_resp []interface{}
+	json.Unmarshal([]byte(data), &sub_resp)
+
+	timetoken := sub_resp[1]
+
+	messages := sub_resp[0].([]interface{})
+	if subscription.Callback != nil {
+		for _, msg := range messages {
+			subscription.Callback(msg)
+		}
+	}
+
+	go pn.poll_loop(channel, subscription, timetoken.(string), req.UUID, restore)
+
+}
+
+func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoken string, uuid string, restore bool) {
 	tt := timetoken
 	connected := true
 	for {
 		req := NewPubnubRequest("subscribe")
 		req.Channel = channel
 		req.Timetoken = tt
+		req.UUID = uuid
 
 		var sub_resp []interface{}
 		data, err := pn.makeRequest(req)
@@ -122,13 +150,19 @@ func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoke
 }
 
 func (pn *Pubnub) makeRequest(req *PubnubRequest) (string, error) {
-	resp, err := http.Get(req.Url(pn.publishKey, pn.subscribeKey, pn.secretKey))
+	client := &http.Client{}
+	hreq, _ := http.NewRequest("GET", req.Url(pn.publishKey, pn.subscribeKey, pn.secretKey), nil)
+	hreq.Header.Set("V", "3.3")
+	hreq.Header.Set("User-Agent", "Go-Google")
+	hreq.Header.Set("Accept", "*/*")
+	resp, err := client.Do(hreq)
 	if err != nil {
 		return "", err
 	}
 
 	defer resp.Body.Close()
 	result, err := ioutil.ReadAll(resp.Body)
+	fmt.Println(string(result))
 	return string(result), nil
 
 }
