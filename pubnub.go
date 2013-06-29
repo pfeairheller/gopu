@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"encoding/json"
 	"github.com/nu7hatch/gouuid"
-	"fmt"
+	// "fmt"
 )
 
 var (
@@ -52,6 +52,15 @@ func (pn *Pubnub) UUID() string {
 	return u4.String()
 }
 
+func (pn *Pubnub) HereNow(channel string, callback func(interface{})) {
+	req := NewPubnubRequest("here_now")
+	req.Channel = channel
+
+	data, _ := pn.makeRequest(req)
+
+	callback(data)
+}
+
 type Subscription struct {
 	Callback   func(interface{})
 	Connect    func()
@@ -84,9 +93,10 @@ func (pn *Pubnub) Subscribe(channel string, subscription *Subscription, restore 
 }
 
 func (pn *Pubnub) Presence(channel string, subscription *Subscription, restore bool) {
+	presenceChannel := channel + "-pnpres"
 	req := NewPubnubRequest("subscribe")
 	req.UUID = pn.UUID()
-	req.Channel = channel + "-pnpres"
+	req.Channel = presenceChannel
 
 	data, _ := pn.makeRequest(req)
 	var sub_resp []interface{}
@@ -101,8 +111,7 @@ func (pn *Pubnub) Presence(channel string, subscription *Subscription, restore b
 		}
 	}
 
-	go pn.poll_loop(channel, subscription, timetoken.(string), req.UUID, restore)
-
+	go pn.poll_loop(presenceChannel, subscription, timetoken.(string), req.UUID, restore)
 }
 
 func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoken string, uuid string, restore bool) {
@@ -151,6 +160,8 @@ func (pn *Pubnub) poll_loop(channel string, subscription *Subscription, timetoke
 
 func (pn *Pubnub) makeRequest(req *PubnubRequest) (string, error) {
 	client := &http.Client{}
+	// fmt.Println(req.Url(pn.publishKey, pn.subscribeKey, pn.secretKey))
+
 	hreq, _ := http.NewRequest("GET", req.Url(pn.publishKey, pn.subscribeKey, pn.secretKey), nil)
 	hreq.Header.Set("V", "3.3")
 	hreq.Header.Set("User-Agent", "Go-Google")
@@ -162,7 +173,6 @@ func (pn *Pubnub) makeRequest(req *PubnubRequest) (string, error) {
 
 	defer resp.Body.Close()
 	result, err := ioutil.ReadAll(resp.Body)
-	fmt.Println(string(result))
 	return string(result), nil
 
 }

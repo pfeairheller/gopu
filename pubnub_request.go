@@ -38,6 +38,8 @@ func (req *PubnubRequest) Url(publishKey string, subscribeKey string, secretKey 
 	switch req.operation {
 	case "time":
 		Url.Path += "/" + req.operation + "/0" 
+	case "here_now":
+		Url.Path += "/v2/presence/sub-key/" + subscribeKey + "/channel/" + req.Channel
 	case "publish":
 		messageBytes, err := json.Marshal(req.Message)
 		if err != nil {
